@@ -1,0 +1,1233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Financial Data Analyst Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <style>
+        .chart-container {
+            position: relative;
+            height: 400px;
+            width: 100%;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Dark mode styles */
+        .dark {
+            color-scheme: dark;
+        }
+        
+        .dark .bg-gray-100 {
+            background-color: #1f2937;
+        }
+        
+        .dark .bg-white {
+            background-color: #374151;
+        }
+        
+        .dark .text-gray-800 {
+            color: #f9fafb;
+        }
+        
+        .dark .text-gray-600 {
+            color: #d1d5db;
+        }
+        
+        .dark .border-gray-300 {
+            border-color: #4b5563;
+        }
+        
+        .dark .bg-blue-50 {
+            background-color: #1e3a8a;
+        }
+        
+        .dark .text-blue-800 {
+            color: #93c5fd;
+        }
+        
+        .dark .text-blue-600 {
+            color: #60a5fa;
+        }
+        
+        .dark .bg-green-50 {
+            background-color: #14532d;
+        }
+        
+        .dark .text-green-800 {
+            color: #86efac;
+        }
+        
+        .dark .text-green-600 {
+            color: #4ade80;
+        }
+        
+        .dark .bg-red-50 {
+            background-color: #7f1d1d;
+        }
+        
+        .dark .text-red-800 {
+            color: #fca5a5;
+        }
+        
+        .dark .text-red-600 {
+            color: #f87171;
+        }
+        
+        .dark .bg-yellow-50 {
+            background-color: #78350f;
+        }
+        
+        .dark .text-yellow-800 {
+            color: #fde047;
+        }
+        
+        .dark .text-yellow-600 {
+            color: #eab308;
+        }
+        
+        /* Theme toggle button */
+        .theme-toggle {
+            position: relative;
+            width: 60px;
+            height: 30px;
+            background-color: #374151;
+            border-radius: 15px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        .theme-toggle.dark {
+            background-color: #1f2937;
+        }
+        
+        .theme-toggle::before {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 24px;
+            height: 24px;
+            background-color: white;
+            border-radius: 50%;
+            transition: transform 0.3s;
+        }
+        
+        .theme-toggle.dark::before {
+            transform: translateX(30px);
+        }
+        
+        .theme-toggle::after {
+            content: 'SUN';
+            position: absolute;
+            top: 50%;
+            left: 8px;
+            transform: translateY(-50%);
+            font-size: 8px;
+            transition: opacity 0.3s;
+        }
+        
+        .theme-toggle.dark::after {
+            content: 'MOON';
+            left: 38px;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-800 mb-2">Hidden Markov Model Financial Analysis</h1>
+                    <p class="text-gray-600">Stock prediction and analysis using Hidden Markov Models</p>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/static/documentation.html" target="_blank" class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        📚 Documentation
+                    </a>
+                    <span class="text-sm text-gray-600">Theme:</span>
+                    <div id="themeToggle" class="theme-toggle" onclick="toggleTheme()"></div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Stock Analysis Section -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">Stock Analysis</h2>
+            <div class="flex flex-wrap gap-4 mb-4">
+                <select id="stockSelect" class="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">Select a stock...</option>
+                </select>
+                <select id="periodSelect" class="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="1y">1 Year</option>
+                    <option value="6mo">6 Months</option>
+                    <option value="3mo">3 Months</option>
+                    <option value="1mo">1 Month</option>
+                </select>
+                <button id="analyzeBtn" class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    Analyze
+                </button>
+            </div>
+            
+            <!-- Stock Charts -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="chart-container">
+                    <canvas id="priceChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <canvas id="volumeChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <canvas id="rsiChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <canvas id="volatilityChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <canvas id="macdChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <canvas id="bollingerChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- Technical Analysis Summary -->
+            <div id="technicalAnalysis" class="mt-6 hidden">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">Technical Analysis Summary</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="bg-blue-50 p-4 rounded-lg">
+                        <h4 class="font-semibold text-blue-800">Trend Direction</h4>
+                        <p id="trendDirection" class="text-xl font-bold text-blue-600">-</p>
+                    </div>
+                    <div class="bg-green-50 p-4 rounded-lg">
+                        <h4 class="font-semibold text-green-800">RSI</h4>
+                        <p id="currentRsi" class="text-xl font-bold text-green-600">-</p>
+                    </div>
+                    <div class="bg-yellow-50 p-4 rounded-lg">
+                        <h4 class="font-semibold text-yellow-800">Volatility</h4>
+                        <p id="currentVolatility" class="text-xl font-bold text-yellow-600">-</p>
+                    </div>
+                    <div class="bg-purple-50 p-4 rounded-lg">
+                        <h4 class="font-semibold text-purple-800">Volume Ratio</h4>
+                        <p id="volumeRatio" class="text-xl font-bold text-purple-600">-</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Portfolio Analysis Section -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">Portfolio Analysis</h2>
+            <div class="mb-4">
+                <div class="flex flex-wrap gap-2 mb-2" id="portfolioStocks">
+                    <!-- Portfolio stocks will be added here -->
+                </div>
+                <button id="addStockBtn" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500">
+                    Add Stock
+                </button>
+                <button id="analyzePortfolioBtn" class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 ml-2">
+                    Analyze Portfolio
+                </button>
+            </div>
+            
+            <!-- Portfolio Results -->
+            <div id="portfolioResults" class="hidden">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="bg-blue-50 p-4 rounded-lg">
+                        <h3 class="font-semibold text-blue-800">Expected Return</h3>
+                        <p id="portfolioReturn" class="text-2xl font-bold text-blue-600">-</p>
+                    </div>
+                    <div class="bg-red-50 p-4 rounded-lg">
+                        <h3 class="font-semibold text-red-800">Volatility</h3>
+                        <p id="portfolioVolatility" class="text-2xl font-bold text-red-600">-</p>
+                    </div>
+                    <div class="bg-green-50 p-4 rounded-lg">
+                        <h3 class="font-semibold text-green-800">Sharpe Ratio</h3>
+                        <p id="sharpeRatio" class="text-2xl font-bold text-green-600">-</p>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="portfolioChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hidden Markov Model Section -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">Hidden Markov Model Analysis</h2>
+            <div class="mb-4">
+                <div class="flex flex-wrap gap-4 mb-4">
+                    <input type="text" id="hmmSymbols" placeholder="AAPL,GOOGL,MSFT,AMZN,TSLA" 
+                           class="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                           value="AAPL,GOOGL,MSFT,AMZN,TSLA">
+                    <select id="hmmPeriod" class="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="1y">1 Year</option>
+                        <option value="6mo">6 Months</option>
+                        <option value="3mo">3 Months</option>
+                        <option value="1mo">1 Month</option>
+                    </select>
+                    <button id="trainHmmBtn" class="px-6 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        Train HMM Model
+                    </button>
+                    <button id="predictHmmBtn" class="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        Predict Next State
+                    </button>
+                    <button id="stateTransitionBtn" class="px-6 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500">
+                        State Transitions
+                    </button>
+                </div>
+            </div>
+            
+            <!-- HMM Model Results -->
+            <div id="hmmResultsSection" class="hidden">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">HMM Model Results</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h4 class="font-semibold text-gray-800 mb-2">State Probabilities</h4>
+                        <div id="stateProbabilities"></div>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h4 class="font-semibold text-gray-800 mb-2">Model Parameters</h4>
+                        <div id="modelParameters"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Prediction Results -->
+            <div id="predictionSection" class="hidden">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">Stock Predictions</h3>
+                <div class="chart-container">
+                    <canvas id="predictionChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- State Transition Matrix -->
+            <div id="stateTransitionSection" class="hidden">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">State Transition Matrix</h3>
+                <div class="chart-container">
+                    <canvas id="stateTransitionChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let priceChart, volumeChart, rsiChart, volatilityChart, macdChart, bollingerChart, portfolioChart;
+        let predictionChart, stateTransitionChart;
+        let portfolioStocks = [];
+        let stockData = {};
+        let technicalAnalysis = {};
+        let hmmData = {};
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSupportedStocks();
+            setupEventListeners();
+        });
+
+        // Load supported stocks
+        async function loadSupportedStocks() {
+            try {
+                const response = await axios.get('/api/stocks');
+                const stockSelect = document.getElementById('stockSelect');
+                
+                response.data.stocks.forEach(stock => {
+                    const option = document.createElement('option');
+                    option.value = stock;
+                    option.textContent = stock;
+                    stockSelect.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading stocks:', error);
+            }
+        }
+
+
+        // Setup event listeners
+        function setupEventListeners() {
+            document.getElementById('analyzeBtn').addEventListener('click', analyzeStock);
+            document.getElementById('addStockBtn').addEventListener('click', addStockToPortfolio);
+            document.getElementById('analyzePortfolioBtn').addEventListener('click', analyzePortfolio);
+            // Hidden Markov Model event listeners
+            document.getElementById('trainHmmBtn').addEventListener('click', trainHmmModel);
+            document.getElementById('predictHmmBtn').addEventListener('click', predictWithHmm);
+            document.getElementById('stateTransitionBtn').addEventListener('click', showStateTransitions);
+        }
+
+        // Analyze individual stock
+        async function analyzeStock() {
+            const symbol = document.getElementById('stockSelect').value;
+            const period = document.getElementById('periodSelect').value;
+            
+            if (!symbol) {
+                alert('Please select a stock');
+                return;
+            }
+
+            try {
+                // Get stock data and technical analysis concurrently
+                const [stockResponse, technicalResponse] = await Promise.all([
+                    axios.get(`/api/stock/${symbol}?period=${period}`),
+                    axios.get(`/api/technical-analysis/${symbol}?period=${period}`)
+                ]);
+                
+                stockData = stockResponse.data;
+                technicalAnalysis = technicalResponse.data;
+                
+                updateCharts();
+                updateTechnicalAnalysis();
+            } catch (error) {
+                console.error('Error analyzing stock:', error);
+                alert('Error analyzing stock. Please try again.');
+            }
+        }
+
+        // Update charts with stock data
+        function updateCharts() {
+            if (!stockData.dates) return;
+
+            const isDark = document.body.classList.contains('dark');
+            const textColor = isDark ? '#f9fafb' : '#374151';
+            const gridColor = isDark ? '#4b5563' : '#e5e7eb';
+
+            // Price Chart
+            const priceCtx = document.getElementById('priceChart').getContext('2d');
+            if (priceChart) priceChart.destroy();
+            
+            priceChart = new Chart(priceCtx, {
+                type: 'line',
+                data: {
+                    labels: stockData.dates,
+                    datasets: [{
+                        label: 'Close Price',
+                        data: stockData.close,
+                        borderColor: 'rgb(59, 130, 246)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.1
+                    }, {
+                        label: 'SMA 20',
+                        data: stockData.sma_20,
+                        borderColor: 'rgb(34, 197, 94)',
+                        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                        tension: 0.1
+                    }, {
+                        label: 'SMA 50',
+                        data: stockData.sma_50,
+                        borderColor: 'rgb(239, 68, 68)',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            ticks: { color: textColor },
+                            grid: { color: gridColor }
+                        },
+                        y: {
+                            beginAtZero: false,
+                            ticks: { color: textColor },
+                            grid: { color: gridColor }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: { color: textColor }
+                        }
+                    }
+                }
+            });
+
+            // Volume Chart
+            const volumeCtx = document.getElementById('volumeChart').getContext('2d');
+            if (volumeChart) volumeChart.destroy();
+            
+            volumeChart = new Chart(volumeCtx, {
+                type: 'bar',
+                data: {
+                    labels: stockData.dates,
+                    datasets: [{
+                        label: 'Volume',
+                        data: stockData.volume,
+                        backgroundColor: 'rgba(156, 163, 175, 0.8)',
+                        borderColor: 'rgb(156, 163, 175)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            ticks: { color: textColor },
+                            grid: { color: gridColor }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: { color: textColor },
+                            grid: { color: gridColor }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: { color: textColor }
+                        }
+                    }
+                }
+            });
+
+            // RSI Chart
+            const rsiCtx = document.getElementById('rsiChart').getContext('2d');
+            if (rsiChart) rsiChart.destroy();
+            
+            rsiChart = new Chart(rsiCtx, {
+                type: 'line',
+                data: {
+                    labels: stockData.dates,
+                    datasets: [{
+                        label: 'RSI',
+                        data: stockData.rsi,
+                        borderColor: 'rgb(168, 85, 247)',
+                        backgroundColor: 'rgba(168, 85, 247, 0.1)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            min: 0,
+                            max: 100
+                        }
+                    }
+                }
+            });
+
+            // Volatility Chart
+            const volatilityCtx = document.getElementById('volatilityChart').getContext('2d');
+            if (volatilityChart) volatilityChart.destroy();
+            
+            volatilityChart = new Chart(volatilityCtx, {
+                type: 'line',
+                data: {
+                    labels: stockData.dates,
+                    datasets: [{
+                        label: 'Volatility',
+                        data: stockData.volatility,
+                        borderColor: 'rgb(245, 158, 11)',
+                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+
+            // MACD Chart
+            const macdCtx = document.getElementById('macdChart').getContext('2d');
+            if (macdChart) macdChart.destroy();
+            
+            macdChart = new Chart(macdCtx, {
+                type: 'line',
+                data: {
+                    labels: stockData.dates,
+                    datasets: [{
+                        label: 'MACD',
+                        data: stockData.macd,
+                        borderColor: 'rgb(34, 197, 94)',
+                        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                        tension: 0.1
+                    }, {
+                        label: 'MACD Signal',
+                        data: stockData.macd_signal,
+                        borderColor: 'rgb(239, 68, 68)',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: false
+                        }
+                    }
+                }
+            });
+
+            // Bollinger Bands Chart
+            const bollingerCtx = document.getElementById('bollingerChart').getContext('2d');
+            if (bollingerChart) bollingerChart.destroy();
+            
+            bollingerChart = new Chart(bollingerCtx, {
+                type: 'line',
+                data: {
+                    labels: stockData.dates,
+                    datasets: [{
+                        label: 'Close Price',
+                        data: stockData.close,
+                        borderColor: 'rgb(59, 130, 246)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.1
+                    }, {
+                        label: 'Upper Band',
+                        data: stockData.bb_upper,
+                        borderColor: 'rgb(156, 163, 175)',
+                        backgroundColor: 'rgba(156, 163, 175, 0.1)',
+                        tension: 0.1
+                    }, {
+                        label: 'Lower Band',
+                        data: stockData.bb_lower,
+                        borderColor: 'rgb(156, 163, 175)',
+                        backgroundColor: 'rgba(156, 163, 175, 0.1)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: false
+                        }
+                    }
+                }
+            });
+        }
+
+        // Update technical analysis summary
+        function updateTechnicalAnalysis() {
+            if (!technicalAnalysis) return;
+
+            document.getElementById('trendDirection').textContent = technicalAnalysis.trend_analysis?.direction || 'neutral';
+            document.getElementById('currentRsi').textContent = technicalAnalysis.rsi ? technicalAnalysis.rsi.toFixed(2) : '-';
+            document.getElementById('currentVolatility').textContent = technicalAnalysis.volatility ? (technicalAnalysis.volatility * 100).toFixed(2) + '%' : '-';
+            document.getElementById('volumeRatio').textContent = technicalAnalysis.volume_analysis?.volume_ratio || '-';
+
+            // Show technical analysis section
+            document.getElementById('technicalAnalysis').classList.remove('hidden');
+        }
+
+        // Add stock to portfolio
+        function addStockToPortfolio() {
+            const symbol = document.getElementById('stockSelect').value;
+            if (!symbol || portfolioStocks.includes(symbol)) {
+                alert('Please select a valid stock that is not already in the portfolio');
+                return;
+            }
+
+            portfolioStocks.push(symbol);
+            updatePortfolioDisplay();
+        }
+
+        // Update portfolio display
+        function updatePortfolioDisplay() {
+            const container = document.getElementById('portfolioStocks');
+            container.innerHTML = '';
+
+            portfolioStocks.forEach((stock, index) => {
+                const stockTag = document.createElement('span');
+                stockTag.className = 'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 mr-2 mb-2';
+                stockTag.innerHTML = `
+                    ${stock}
+                    <button onclick="removeStockFromPortfolio(${index})" class="ml-2 text-blue-600 hover:text-blue-800">×</button>
+                `;
+                container.appendChild(stockTag);
+            });
+        }
+
+        // Remove stock from portfolio
+        function removeStockFromPortfolio(index) {
+            portfolioStocks.splice(index, 1);
+            updatePortfolioDisplay();
+        }
+
+        // Analyze portfolio
+        async function analyzePortfolio() {
+            if (portfolioStocks.length === 0) {
+                alert('Please add at least one stock to the portfolio');
+                return;
+            }
+
+            try {
+                const response = await axios.post('/api/portfolio', {
+                    symbols: portfolioStocks,
+                    weights: null // Equal weights
+                });
+
+                const data = response.data;
+                
+                // Update portfolio metrics
+                document.getElementById('portfolioReturn').textContent = `${(data.portfolio_return * 100).toFixed(2)}%`;
+                document.getElementById('portfolioVolatility').textContent = `${(data.portfolio_volatility * 100).toFixed(2)}%`;
+                document.getElementById('sharpeRatio').textContent = data.sharpe_ratio.toFixed(2);
+
+                // Show portfolio results
+                document.getElementById('portfolioResults').classList.remove('hidden');
+
+                // Create portfolio performance chart
+                const portfolioCtx = document.getElementById('portfolioChart').getContext('2d');
+                if (portfolioChart) portfolioChart.destroy();
+                
+                portfolioChart = new Chart(portfolioCtx, {
+                    type: 'line',
+                    data: {
+                        labels: Array.from({length: data.daily_returns.length}, (_, i) => `Day ${i + 1}`),
+                        datasets: [{
+                            label: 'Portfolio Returns',
+                            data: data.daily_returns.map(r => r * 100),
+                            borderColor: 'rgb(168, 85, 247)',
+                            backgroundColor: 'rgba(168, 85, 247, 0.1)',
+                            tension: 0.1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: false,
+                                title: {
+                                    display: true,
+                                    text: 'Daily Return (%)'
+                                }
+                            }
+                        }
+                    }
+                });
+
+            } catch (error) {
+                console.error('Error analyzing portfolio:', error);
+                alert('Error analyzing portfolio. Please try again.');
+            }
+        }
+
+        // Theme toggle functionality
+        function toggleTheme() {
+            const body = document.body;
+            const themeToggle = document.getElementById('themeToggle');
+            
+            if (body.classList.contains('dark')) {
+                body.classList.remove('dark');
+                themeToggle.classList.remove('dark');
+                localStorage.setItem('theme', 'light');
+            } else {
+                body.classList.add('dark');
+                themeToggle.classList.add('dark');
+                localStorage.setItem('theme', 'dark');
+            }
+            
+            // Update chart colors for dark mode
+            updateChartColors();
+        }
+
+        // Load saved theme
+        function loadTheme() {
+            const savedTheme = localStorage.getItem('theme');
+            const body = document.body;
+            const themeToggle = document.getElementById('themeToggle');
+            
+            if (savedTheme === 'dark') {
+                body.classList.add('dark');
+                themeToggle.classList.add('dark');
+            }
+        }
+
+        // Update chart colors based on theme
+        function updateChartColors() {
+            const isDark = document.body.classList.contains('dark');
+            const textColor = isDark ? '#f9fafb' : '#374151';
+            const gridColor = isDark ? '#4b5563' : '#e5e7eb';
+            
+            // Update all charts if they exist
+            const charts = [priceChart, volumeChart, rsiChart, volatilityChart, macdChart, bollingerChart, portfolioChart];
+            
+            charts.forEach(chart => {
+                if (chart) {
+                    chart.options.scales.x.ticks.color = textColor;
+                    chart.options.scales.y.ticks.color = textColor;
+                    chart.options.scales.x.grid.color = gridColor;
+                    chart.options.scales.y.grid.color = gridColor;
+                    chart.options.plugins.legend.labels.color = textColor;
+                    chart.update();
+                }
+            });
+        }
+
+        // Initialize theme on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadTheme();
+            updateChartColors();
+        });
+
+        // Markowitz Portfolio Theory Functions
+        async function generateEfficientFrontier() {
+            const symbols = document.getElementById('markowitzSymbols').value;
+            const period = document.getElementById('markowitzPeriod').value;
+            
+            if (!symbols.trim()) {
+                alert('Please enter stock symbols');
+                return;
+            }
+
+            try {
+                const response = await axios.get(`/api/markowitz/efficient-frontier?symbols=${encodeURIComponent(symbols)}&period=${period}`);
+                markowitzData = response.data;
+                
+                // Show the efficient frontier section
+                document.getElementById('efficientFrontierSection').classList.remove('hidden');
+                
+                // Create efficient frontier chart
+                createEfficientFrontierChart(markowitzData);
+                
+                // Display optimal portfolio information
+                displayOptimalPortfolio(markowitzData.optimal_portfolio);
+                
+            } catch (error) {
+                console.error('Error generating efficient frontier:', error);
+                alert('Error generating efficient frontier. Please try again.');
+            }
+        }
+
+        function createEfficientFrontierChart(data) {
+            const ctx = document.getElementById('efficientFrontierChart').getContext('2d');
+            if (efficientFrontierChart) efficientFrontierChart.destroy();
+            
+            const isDark = document.body.classList.contains('dark');
+            const textColor = isDark ? '#f9fafb' : '#374151';
+            const gridColor = isDark ? '#4b5563' : '#e5e7eb';
+            
+            const frontierData = data.efficient_frontier;
+            const optimalPortfolio = data.optimal_portfolio;
+            
+            // Prepare data for chart
+            const frontierPoints = frontierData.map(p => ({
+                x: p.volatility * 100, // Convert to percentage
+                y: p.return * 100
+            }));
+            
+            efficientFrontierChart = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: 'Efficient Frontier',
+                        data: frontierPoints,
+                        backgroundColor: 'rgba(147, 51, 234, 0.6)',
+                        borderColor: 'rgb(147, 51, 234)',
+                        pointRadius: 3,
+                        pointHoverRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Volatility (%)',
+                                color: textColor
+                            },
+                            ticks: { color: textColor },
+                            grid: { color: gridColor }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Expected Return (%)',
+                                color: textColor
+                            },
+                            ticks: { color: textColor },
+                            grid: { color: gridColor }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: { color: textColor }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const point = frontierData[context.dataIndex];
+                                    return [
+                                        `Return: ${(point.return * 100).toFixed(2)}%`,
+                                        `Volatility: ${(point.volatility * 100).toFixed(2)}%`,
+                                        `Sharpe Ratio: ${point.sharpe_ratio.toFixed(3)}`
+                                    ];
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Add optimal portfolio point if available
+            if (optimalPortfolio) {
+                efficientFrontierChart.data.datasets.push({
+                    label: 'Optimal Portfolio',
+                    data: [{
+                        x: optimalPortfolio.volatility * 100,
+                        y: optimalPortfolio.return * 100
+                    }],
+                    backgroundColor: 'rgba(239, 68, 68, 0.8)',
+                    borderColor: 'rgb(239, 68, 68)',
+                    pointRadius: 8,
+                    pointHoverRadius: 10
+                });
+                efficientFrontierChart.update();
+            }
+        }
+
+        function displayOptimalPortfolio(optimalPortfolio) {
+            if (!optimalPortfolio) return;
+            
+            const container = document.getElementById('optimalPortfolioInfo');
+            container.innerHTML = `
+                <div class="bg-blue-50 p-4 rounded-lg">
+                    <h4 class="font-semibold text-blue-800">Expected Return</h4>
+                    <p class="text-xl font-bold text-blue-600">${(optimalPortfolio.return * 100).toFixed(2)}%</p>
+                </div>
+                <div class="bg-red-50 p-4 rounded-lg">
+                    <h4 class="font-semibold text-red-800">Volatility</h4>
+                    <p class="text-xl font-bold text-red-600">${(optimalPortfolio.volatility * 100).toFixed(2)}%</p>
+                </div>
+                <div class="bg-green-50 p-4 rounded-lg">
+                    <h4 class="font-semibold text-green-800">Sharpe Ratio</h4>
+                    <p class="text-xl font-bold text-green-600">${optimalPortfolio.sharpe_ratio.toFixed(3)}</p>
+                </div>
+            `;
+        }
+
+        async function optimizePortfolio() {
+            const symbols = document.getElementById('markowitzSymbols').value;
+            const period = document.getElementById('markowitzPeriod').value;
+            
+            if (!symbols.trim()) {
+                alert('Please enter stock symbols');
+                return;
+            }
+
+            try {
+                const response = await axios.get(`/api/markowitz/optimize-portfolio?symbols=${encodeURIComponent(symbols)}&period=${period}`);
+                const result = response.data;
+                
+                if (result.success) {
+                    // Show the optimization section
+                    document.getElementById('portfolioOptimizationSection').classList.remove('hidden');
+                    
+                    // Display optimization results
+                    displayOptimizationResults(result);
+                } else {
+                    alert(`Optimization failed: ${result.message}`);
+                }
+                
+            } catch (error) {
+                console.error('Error optimizing portfolio:', error);
+                alert('Error optimizing portfolio. Please try again.');
+            }
+        }
+
+        function displayOptimizationResults(result) {
+            const container = document.getElementById('optimizationResults');
+            
+            // Create weights chart
+            const weightsData = Object.entries(result.weights).map(([symbol, weight]) => ({
+                label: symbol,
+                value: weight * 100
+            }));
+            
+            container.innerHTML = `
+                <div class="bg-white p-6 rounded-lg border">
+                    <h4 class="text-lg font-semibold mb-4">Portfolio Weights</h4>
+                    <div class="space-y-2">
+                        ${weightsData.map(item => `
+                            <div class="flex justify-between items-center">
+                                <span class="font-medium">${item.label}</span>
+                                <span class="text-blue-600 font-bold">${item.value.toFixed(1)}%</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-lg border">
+                    <h4 class="text-lg font-semibold mb-4">Portfolio Metrics</h4>
+                    <div class="space-y-3">
+                        <div class="flex justify-between">
+                            <span>Expected Return:</span>
+                            <span class="font-bold text-green-600">${(result.expected_return * 100).toFixed(2)}%</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Volatility:</span>
+                            <span class="font-bold text-red-600">${(result.volatility * 100).toFixed(2)}%</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Sharpe Ratio:</span>
+                            <span class="font-bold text-blue-600">${result.sharpe_ratio.toFixed(3)}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Risk-Free Rate:</span>
+                            <span class="font-bold">${(result.risk_free_rate * 100).toFixed(2)}%</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function trainHmmModel() {
+            const symbols = document.getElementById('hmmSymbols').value;
+            const period = document.getElementById('hmmPeriod').value;
+            
+            if (!symbols.trim()) {
+                alert('Please enter stock symbols');
+                return;
+            }
+
+            try {
+                const response = await axios.get(`/api/hmm/train?symbols=${encodeURIComponent(symbols)}&period=${period}`);
+                const data = response.data;
+                
+                // Show the HMM results section
+                document.getElementById('hmmResultsSection').classList.remove('hidden');
+                
+                // Display state probabilities
+                displayStateProbabilities(data.state_probabilities);
+                displayModelParameters(data.model_parameters);
+                
+            } catch (error) {
+                console.error('Error training HMM model:', error);
+                alert('Error training HMM model. Please try again.');
+            }
+        }
+
+        async function predictWithHmm() {
+            const symbols = document.getElementById('hmmSymbols').value;
+            const period = document.getElementById('hmmPeriod').value;
+            
+            if (!symbols.trim()) {
+                alert('Please enter stock symbols');
+                return;
+            }
+
+            try {
+                const response = await axios.get(`/api/hmm/predict?symbols=${encodeURIComponent(symbols)}&period=${period}`);
+                const data = response.data;
+                
+                // Show the prediction section
+                document.getElementById('predictionSection').classList.remove('hidden');
+                
+                // Create prediction chart
+                createPredictionChart(data);
+                
+            } catch (error) {
+                console.error('Error making HMM predictions:', error);
+                alert('Error making HMM predictions. Please try again.');
+            }
+        }
+
+        async function showStateTransitions() {
+            const symbols = document.getElementById('hmmSymbols').value;
+            const period = document.getElementById('hmmPeriod').value;
+            
+            if (!symbols.trim()) {
+                alert('Please enter stock symbols');
+                return;
+            }
+
+            try {
+                const response = await axios.get(`/api/hmm/state-transitions?symbols=${encodeURIComponent(symbols)}&period=${period}`);
+                const data = response.data;
+                
+                // Show the state transition section
+                document.getElementById('stateTransitionSection').classList.remove('hidden');
+                
+                // Create state transition chart
+                createStateTransitionChart(data);
+                
+            } catch (error) {
+                console.error('Error loading state transitions:', error);
+                alert('Error loading state transitions. Please try again.');
+            }
+        }
+
+        function displayStateProbabilities(probabilities) {
+            const container = document.getElementById('stateProbabilities');
+            container.innerHTML = '';
+            
+            Object.entries(probabilities).forEach(([state, prob]) => {
+                const div = document.createElement('div');
+                div.className = 'flex justify-between items-center p-2 bg-white rounded mb-2';
+                div.innerHTML = `
+                    <span class="font-medium">State ${state}:</span>
+                    <span class="text-blue-600 font-bold">${(prob * 100).toFixed(2)}%</span>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function displayModelParameters(parameters) {
+            const container = document.getElementById('modelParameters');
+            container.innerHTML = `
+                <div class="space-y-2">
+                    <div class="flex justify-between">
+                        <span>Number of States:</span>
+                        <span class="font-bold">${parameters.n_states}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Convergence:</span>
+                        <span class="font-bold">${parameters.converged ? 'Yes' : 'No'}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Log Likelihood:</span>
+                        <span class="font-bold">${parameters.log_likelihood.toFixed(4)}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        function createPredictionChart(data) {
+            const ctx = document.getElementById('predictionChart').getContext('2d');
+            if (predictionChart) predictionChart.destroy();
+            
+            const isDark = document.body.classList.contains('dark');
+            const textColor = isDark ? '#f9fafb' : '#374151';
+            
+            const predictions = data.predictions;
+            const dates = data.dates;
+            
+            // Prepare data for line chart
+            const chartData = {
+                labels: dates,
+                datasets: Object.entries(predictions).map(([symbol, values], index) => ({
+                    label: symbol,
+                    data: values,
+                    borderColor: `hsl(${index * 60}, 70%, 50%)`,
+                    backgroundColor: `hsla(${index * 60}, 70%, 50%, 0.1)`,
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.1
+                }))
+            };
+            
+            predictionChart = new Chart(ctx, {
+                type: 'line',
+                data: chartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            ticks: { color: textColor },
+                            grid: { color: isDark ? '#4b5563' : '#e5e7eb' }
+                        },
+                        y: {
+                            ticks: { color: textColor },
+                            grid: { color: isDark ? '#4b5563' : '#e5e7eb' }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: { color: textColor }
+                        },
+                        title: {
+                            display: true,
+                            text: 'HMM Stock Price Predictions',
+                            color: textColor,
+                            font: { size: 16, weight: 'bold' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function createStateTransitionChart(data) {
+            const ctx = document.getElementById('stateTransitionChart').getContext('2d');
+            if (stateTransitionChart) stateTransitionChart.destroy();
+            
+            const isDark = document.body.classList.contains('dark');
+            const textColor = isDark ? '#f9fafb' : '#374151';
+            
+            const transitionMatrix = data.transition_matrix;
+            const states = data.states;
+            
+            // Prepare data for heatmap
+            const chartData = {
+                labels: states,
+                datasets: states.map((state, i) => ({
+                    label: `State ${state}`,
+                    data: states.map((_, j) => transitionMatrix[i][j]),
+                    backgroundColor: states.map((_, j) => {
+                        const value = transitionMatrix[i][j];
+                        const alpha = value * 0.8 + 0.2;
+                        return `rgba(59, 130, 246, ${alpha})`;
+                    })
+                }))
+            };
+            
+            stateTransitionChart = new Chart(ctx, {
+                type: 'bar',
+                data: chartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            stacked: true,
+                            ticks: { color: textColor },
+                            grid: { display: false }
+                        },
+                        y: {
+                            min: 0,
+                            max: 1,
+                            ticks: { 
+                                color: textColor,
+                                callback: function(value) {
+                                    return value.toFixed(2);
+                                }
+                            },
+                            grid: { color: isDark ? '#4b5563' : '#e5e7eb' }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        title: {
+                            display: true,
+                            text: 'HMM State Transition Matrix',
+                            color: textColor,
+                            font: { size: 16, weight: 'bold' }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>

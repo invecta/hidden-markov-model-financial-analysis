@@ -119,14 +119,17 @@ class FinancialAnalyzer:
         try:
             import alpaca_trade_api as tradeapi
             self.alpaca_api = tradeapi.REST(
-                os.getenv('ALPACA_API_KEY'),
-                os.getenv('ALPACA_SECRET_KEY'),
-                os.getenv('ALPACA_BASE_URL'),
+                os.getenv('APCA_API_KEY_ID'),
+                os.getenv('APCA_SECRET_KEY'),
+                os.getenv('APCA_API_BASE_URL'),
                 api_version='v2'
             )
         except ImportError:
             self.alpaca_api = None
             logger.warning("Alpaca API not available - install alpaca-trade-api")
+        except Exception as e:
+            self.alpaca_api = None
+            logger.warning(f"Alpaca API initialization failed: {e}")
         
         # Polygon.io configuration
         self.polygon_api_key = os.getenv('POLYGON_API_KEY')
@@ -151,7 +154,13 @@ class FinancialAnalyzer:
             hist = stock.history(period=period)
             
             if hist.empty:
-                raise HTTPException(status_code=404, detail=f"No data found for {symbol}")
+                # Try with a different period
+                hist = stock.history(period="1y")
+                if hist.empty:
+                    # Try with a different symbol format
+                    hist = stock.history(period="1y", auto_adjust=True)
+                    if hist.empty:
+                        raise HTTPException(status_code=404, detail=f"No data found for {symbol} after trying multiple periods")
             
             return self.process_stock_data(hist, symbol)
             
@@ -176,6 +185,7 @@ class FinancialAnalyzer:
         # Get bars from Alpaca
         if self.alpaca_api:
             try:
+                import alpaca_trade_api as tradeapi
                 bars = self.alpaca_api.get_bars(
                     symbol,
                     tradeapi.TimeFrame.Day,

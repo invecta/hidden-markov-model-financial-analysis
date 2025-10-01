@@ -141,30 +141,53 @@ class FinancialAnalyzer:
     def get_stock_data(self, symbol: str, period: str = "1y") -> dict:
         """Fetch stock data from multiple sources (Alpaca, Polygon, Yahoo Finance)"""
         try:
-            # Try Alpaca first for real-time data
-            try:
-                hist = self.get_alpaca_data(symbol, period)
-                if not hist.empty:
-                    return self.process_stock_data(hist, symbol)
-            except:
-                pass
+            # Try Alpaca first for real-time data (only if initialized)
+            if self.alpaca_api:
+                try:
+                    hist = self.get_alpaca_data(symbol, period)
+                    if not hist.empty:
+                        return self.process_stock_data(hist, symbol)
+                except Exception as e:
+                    logger.warning(f"Alpaca failed for {symbol}: {e}")
             
-            # Fallback to Yahoo Finance
+            # Fallback to Yahoo Finance with multiple attempts
             stock = yf.Ticker(symbol)
-            hist = stock.history(period=period)
             
-            if hist.empty:
-                # Try with a different period
-                hist = stock.history(period="1y")
-                if hist.empty:
-                    # Try with a different symbol format
-                    hist = stock.history(period="1y", auto_adjust=True)
-                    if hist.empty:
-                        raise HTTPException(status_code=404, detail=f"No data found for {symbol} after trying multiple periods")
+            # Try different approaches
+            attempts = [
+                {'period': period, 'interval': '1d'},
+                {'period': '1y', 'interval': '1d'},
+                {'period': '6mo', 'interval': '1d'},
+                {'period': '3mo', 'interval': '1d'},
+                {'period': '1mo', 'interval': '1d'},
+            ]
             
-            return self.process_stock_data(hist, symbol)
+            for attempt in attempts:
+                try:
+                    hist = stock.history(period=attempt['period'], interval=attempt['interval'])
+                    if not hist.empty and len(hist) > 10:  # Need at least 10 data points
+                        logger.info(f"Got {len(hist)} data points for {symbol} with period={attempt['period']}")
+                        return self.process_stock_data(hist, symbol)
+                except Exception as e:
+                    logger.warning(f"Yahoo Finance attempt failed for {symbol} with {attempt}: {e}")
+                    continue
             
+            # Last resort: try with download function
+            try:
+                import yfinance as yf
+                hist = yf.download(symbol, period="1y", progress=False, show_errors=False)
+                if not hist.empty:
+                    logger.info(f"Got {len(hist)} data points for {symbol} using download")
+                    return self.process_stock_data(hist, symbol)
+            except Exception as e:
+                logger.warning(f"Yahoo Finance download failed for {symbol}: {e}")
+            
+            raise HTTPException(status_code=404, detail=f"No data found for {symbol}. Yahoo Finance may be experiencing issues.")
+            
+        except HTTPException:
+            raise
         except Exception as e:
+            logger.error(f"Unexpected error for {symbol}: {e}")
             raise HTTPException(status_code=500, detail=f"Error fetching data: {str(e)}")
     
     def get_alpaca_data(self, symbol: str, period: str) -> pd.DataFrame:

@@ -145,6 +145,49 @@
             content: 'MOON';
             left: 38px;
         }
+        
+        /* Market Status Indicator */
+        .market-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background-color: #f0f9ff;
+            border: 1px solid #0ea5e9;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .market-status.dark {
+            background-color: #1e3a8a;
+            border-color: #3b82f6;
+        }
+        
+        .status-light {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #10b981;
+            box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+            animation: pulse 2s infinite;
+        }
+        
+        .status-light.offline {
+            background-color: #ef4444;
+            box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+        }
+        
+        .status-light.connecting {
+            background-color: #f59e0b;
+            box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -157,6 +200,11 @@
                     <p class="text-gray-600">Stock prediction and analysis using Hidden Markov Models</p>
                 </div>
                 <div class="flex items-center space-x-4">
+                    <!-- Market Status Indicator -->
+                    <div id="marketStatus" class="market-status">
+                        <div id="statusLight" class="status-light"></div>
+                        <span id="statusText">Live Data Feed</span>
+                    </div>
                     <a href="/static/documentation.html" target="_blank" class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500">
                         📚 Documentation
                     </a>
@@ -1228,6 +1276,57 @@
                 }
             });
         }
+
+        // Market Status Functions
+        async function updateMarketStatus() {
+            try {
+                const response = await axios.get('/api/market-status');
+                const status = response.data;
+                
+                const statusLight = document.getElementById('statusLight');
+                const statusText = document.getElementById('statusText');
+                const marketStatus = document.getElementById('marketStatus');
+                
+                // Update status light and text based on data feed status
+                if (status.data_feed_status === 'online') {
+                    statusLight.className = 'status-light';
+                    statusText.textContent = 'Live Data Feed';
+                    marketStatus.title = `Market: ${status.market_open ? 'Open' : 'Closed'} | Source: ${status.primary_source} | Last Update: ${status.last_update ? new Date(status.last_update).toLocaleTimeString() : 'Unknown'}`;
+                } else if (status.data_feed_status === 'limited') {
+                    statusLight.className = 'status-light connecting';
+                    statusText.textContent = 'Limited Data';
+                    marketStatus.title = `Market: ${status.market_open ? 'Open' : 'Closed'} | Source: ${status.primary_source} | Last Update: ${status.last_update ? new Date(status.last_update).toLocaleTimeString() : 'Unknown'}`;
+                } else {
+                    statusLight.className = 'status-light offline';
+                    statusText.textContent = 'Offline';
+                    marketStatus.title = `Market: ${status.market_open ? 'Open' : 'Closed'} | Data Feed: Offline`;
+                }
+                
+                // Update market status styling based on theme
+                const isDark = document.body.classList.contains('dark');
+                if (isDark) {
+                    marketStatus.classList.add('dark');
+                } else {
+                    marketStatus.classList.remove('dark');
+                }
+                
+            } catch (error) {
+                console.error('Error updating market status:', error);
+                const statusLight = document.getElementById('statusLight');
+                const statusText = document.getElementById('statusText');
+                const marketStatus = document.getElementById('marketStatus');
+                
+                statusLight.className = 'status-light offline';
+                statusText.textContent = 'Error';
+                marketStatus.title = 'Unable to check market status';
+            }
+        }
+
+        // Update market status on page load and every 30 seconds
+        document.addEventListener('DOMContentLoaded', function() {
+            updateMarketStatus();
+            setInterval(updateMarketStatus, 30000); // Update every 30 seconds
+        });
     </script>
 </body>
 </html>

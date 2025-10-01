@@ -610,6 +610,96 @@ async def get_market_overview():
     
     return overview
 
+@app.get("/api/market-status")
+async def get_market_status():
+    """Get market status and data feed health"""
+    try:
+        status = {
+            'market_open': False,
+            'data_feed_status': 'offline',
+            'primary_source': 'unknown',
+            'last_update': None,
+            'alpaca_status': 'offline',
+            'polygon_status': 'offline',
+            'yahoo_status': 'offline'
+        }
+        
+        # Check if market is open (simplified - US market hours)
+        from datetime import datetime, time
+        now = datetime.now()
+        market_open_time = time(9, 30)  # 9:30 AM
+        market_close_time = time(16, 0)  # 4:00 PM
+        
+        # Check if it's a weekday and within market hours
+        if now.weekday() < 5 and market_open_time <= now.time() <= market_close_time:
+            status['market_open'] = True
+        
+        # Test Alpaca API
+        if analyzer.alpaca_api:
+            try:
+                latest_bar = analyzer.alpaca_api.get_latest_bar('AAPL')
+                if latest_bar:
+                    status['alpaca_status'] = 'online'
+                    status['primary_source'] = 'alpaca'
+                    status['last_update'] = latest_bar.t.isoformat()
+            except Exception as e:
+                logger.warning(f"Alpaca API test failed: {e}")
+        
+        # Test Polygon.io API
+        if analyzer.polygon_api_key:
+            try:
+                import requests
+                url = f"{analyzer.polygon_base_url}/v2/aggs/ticker/AAPL/range/1/day/2024-01-01/2024-01-31"
+                params = {'apikey': analyzer.polygon_api_key}
+                response = requests.get(url, params=params, timeout=5)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if 'results' in data and data['results']:
+                        status['polygon_status'] = 'online'
+                        if status['primary_source'] == 'unknown':
+                            status['primary_source'] = 'polygon'
+                        if not status['last_update']:
+                            status['last_update'] = datetime.fromtimestamp(data['results'][-1]['t']/1000).isoformat()
+            except Exception as e:
+                logger.warning(f"Polygon.io API test failed: {e}")
+        
+        # Test Yahoo Finance
+        try:
+            stock = yf.Ticker('AAPL')
+            hist = stock.history(period="1d")
+            if not hist.empty:
+                status['yahoo_status'] = 'online'
+                if status['primary_source'] == 'unknown':
+                    status['primary_source'] = 'yahoo'
+                if not status['last_update']:
+                    status['last_update'] = hist.index[-1].isoformat()
+        except Exception as e:
+            logger.warning(f"Yahoo Finance API test failed: {e}")
+        
+        # Determine overall data feed status
+        if status['alpaca_status'] == 'online' or status['polygon_status'] == 'online':
+            status['data_feed_status'] = 'online'
+        elif status['yahoo_status'] == 'online':
+            status['data_feed_status'] = 'limited'
+        else:
+            status['data_feed_status'] = 'offline'
+        
+        return status
+    
+    except Exception as e:
+        logger.error(f"Error getting market status: {e}")
+        return {
+            'market_open': False,
+            'data_feed_status': 'error',
+            'primary_source': 'unknown',
+            'last_update': None,
+            'alpaca_status': 'error',
+            'polygon_status': 'error',
+            'yahoo_status': 'error',
+            'error': str(e)
+        }
+
 @app.get("/api/real-time/{symbol}")
 async def get_real_time_data(symbol: str):
     """Get real-time data for a specific symbol"""

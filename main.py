@@ -18,6 +18,10 @@ from concurrent.futures import ThreadPoolExecutor
 from scipy.optimize import minimize
 # import ta  # Commented out due to installation issues
 import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -112,12 +116,17 @@ class FinancialAnalyzer:
         ]
         
         # Initialize Alpaca API
-        # self.alpaca_api = tradeapi.REST(
-            # os.getenv('ALPACA_API_KEY'),
-            # os.getenv('ALPACA_SECRET_KEY'),
-            # os.getenv('ALPACA_BASE_URL'),
-            # api_version='v2'
-        # )
+        try:
+            import alpaca_trade_api as tradeapi
+            self.alpaca_api = tradeapi.REST(
+                os.getenv('ALPACA_API_KEY'),
+                os.getenv('ALPACA_SECRET_KEY'),
+                os.getenv('ALPACA_BASE_URL'),
+                api_version='v2'
+            )
+        except ImportError:
+            self.alpaca_api = None
+            logger.warning("Alpaca API not available - install alpaca-trade-api")
         
         # Polygon.io configuration
         self.polygon_api_key = os.getenv('POLYGON_API_KEY')
@@ -165,15 +174,20 @@ class FinancialAnalyzer:
             start_date = end_date - timedelta(days=365)
         
         # Get bars from Alpaca
-        # bars = self.alpaca_api.get_bars(
-            # symbol,
-            # tradeapi.TimeFrame.Day,
-            # start=start_date.strftime('%Y-%m-%d'),
-            # end=end_date.strftime('%Y-%m-%d'),
-            # adjustment='raw'
-        # ).df
-        
-        # return bars
+        if self.alpaca_api:
+            try:
+                bars = self.alpaca_api.get_bars(
+                    symbol,
+                    tradeapi.TimeFrame.Day,
+                    start=start_date.strftime('%Y-%m-%d'),
+                    end=end_date.strftime('%Y-%m-%d'),
+                    adjustment='raw'
+                ).df
+                return bars
+            except Exception as e:
+                logger.warning(f"Alpaca API error: {e}")
+                return pd.DataFrame()
+        return pd.DataFrame()
     
     def get_polygon_data(self, symbol: str, period: str) -> dict:
         """Fetch additional data from Polygon.io"""
@@ -353,21 +367,22 @@ async def get_market_overview():
     def get_stock_overview(symbol):
         try:
             # Try to get real-time data from Alpaca first
-            try:
-                latest_bar = analyzer.alpaca_api.get_latest_bar(symbol)
-                if latest_bar:
-                    return {
-                        'symbol': symbol,
-                        'current_price': round(latest_bar.c, 2),
-                        'change': round(latest_bar.c - latest_bar.o, 2),
-                        'change_percent': round(((latest_bar.c - latest_bar.o) / latest_bar.o) * 100, 2),
-                        'volume': latest_bar.v,
-                        'high': round(latest_bar.h, 2),
-                        'low': round(latest_bar.l, 2),
-                        'source': 'alpaca'
-                    }
-            except:
-                pass
+            if analyzer.alpaca_api:
+                try:
+                    latest_bar = analyzer.alpaca_api.get_latest_bar(symbol)
+                    if latest_bar:
+                        return {
+                            'symbol': symbol,
+                            'current_price': round(latest_bar.c, 2),
+                            'change': round(latest_bar.c - latest_bar.o, 2),
+                            'change_percent': round(((latest_bar.c - latest_bar.o) / latest_bar.o) * 100, 2),
+                            'volume': latest_bar.v,
+                            'high': round(latest_bar.h, 2),
+                            'low': round(latest_bar.l, 2),
+                            'source': 'alpaca'
+                        }
+                except:
+                    pass
             
             # Fallback to Yahoo Finance
             stock = yf.Ticker(symbol)
@@ -410,18 +425,36 @@ async def get_real_time_data(symbol: str):
     """Get real-time data for a specific symbol"""
     try:
         # Get latest bar from Alpaca
-        latest_bar = analyzer.alpaca_api.get_latest_bar(symbol)
+        if analyzer.alpaca_api:
+            latest_bar = analyzer.alpaca_api.get_latest_bar(symbol)
+            
+            if latest_bar:
+                return {
+                    'symbol': symbol,
+                    'timestamp': latest_bar.t.isoformat(),
+                    'open': round(latest_bar.o, 2),
+                    'high': round(latest_bar.h, 2),
+                    'low': round(latest_bar.l, 2),
+                    'close': round(latest_bar.c, 2),
+                    'volume': latest_bar.v,
+                    'vwap': round(latest_bar.vw, 2) if hasattr(latest_bar, 'vw') else None
+                }
         
-        if latest_bar:
+        # Fallback to Yahoo Finance
+        stock = yf.Ticker(symbol)
+        hist = stock.history(period="1d")
+        
+        if not hist.empty:
+            latest = hist.iloc[-1]
             return {
                 'symbol': symbol,
-                'timestamp': latest_bar.t.isoformat(),
-                'open': round(latest_bar.o, 2),
-                'high': round(latest_bar.h, 2),
-                'low': round(latest_bar.l, 2),
-                'close': round(latest_bar.c, 2),
-                'volume': latest_bar.v,
-                'vwap': round(latest_bar.vw, 2) if hasattr(latest_bar, 'vw') else None
+                'timestamp': hist.index[-1].isoformat(),
+                'open': round(latest['Open'], 2),
+                'high': round(latest['High'], 2),
+                'low': round(latest['Low'], 2),
+                'close': round(latest['Close'], 2),
+                'volume': int(latest['Volume']),
+                'vwap': None
             }
         else:
             raise HTTPException(status_code=404, detail=f"No real-time data available for {symbol}")

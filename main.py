@@ -16,7 +16,7 @@ import requests
 import os
 from concurrent.futures import ThreadPoolExecutor
 from scipy.optimize import minimize
-import ta
+# import ta  # Commented out due to installation issues
 import os
 
 # Configure logging
@@ -191,16 +191,16 @@ class FinancialAnalyzer:
     
     def process_stock_data(self, hist: pd.DataFrame, symbol: str) -> dict:
         """Process and enhance stock data with technical indicators"""
-        # Calculate advanced technical indicators using ta library
-        hist['SMA_20'] = ta.trend.sma_indicator(hist['Close'], window=20)
-        hist['SMA_50'] = ta.trend.sma_indicator(hist['Close'], window=50)
-        hist['EMA_12'] = ta.trend.ema_indicator(hist['Close'], window=12)
-        hist['EMA_26'] = ta.trend.ema_indicator(hist['Close'], window=26)
-        hist['RSI'] = ta.momentum.rsi(hist['Close'], window=14)
-        hist['MACD'] = ta.trend.macd(hist['Close'])
-        hist['MACD_signal'] = ta.trend.macd_signal(hist['Close'])
-        hist['BB_upper'] = ta.volatility.bollinger_hband(hist['Close'])
-        hist['BB_lower'] = ta.volatility.bollinger_lband(hist['Close'])
+        # Calculate technical indicators manually (without ta library)
+        hist['SMA_20'] = hist['Close'].rolling(window=20).mean()
+        hist['SMA_50'] = hist['Close'].rolling(window=50).mean()
+        hist['EMA_12'] = hist['Close'].ewm(span=12).mean()
+        hist['EMA_26'] = hist['Close'].ewm(span=26).mean()
+        hist['RSI'] = self.calculate_rsi(hist['Close'], 14)
+        hist['MACD'] = hist['EMA_12'] - hist['EMA_26']
+        hist['MACD_signal'] = hist['MACD'].ewm(span=9).mean()
+        hist['BB_upper'] = hist['SMA_20'] + (hist['Close'].rolling(window=20).std() * 2)
+        hist['BB_lower'] = hist['SMA_20'] - (hist['Close'].rolling(window=20).std() * 2)
         hist['Volatility'] = hist['Close'].pct_change().rolling(window=20).std() * np.sqrt(252)
         hist['Volume_SMA'] = hist['Volume'].rolling(window=20).mean()
         

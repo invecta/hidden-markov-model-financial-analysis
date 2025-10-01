@@ -1,8 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
-import logging
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -12,111 +10,42 @@ from typing import List, Optional
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.utils import PlotlyJSONEncoder
+import alpaca_trade_api as tradeapi
 import requests
 import os
-from concurrent.futures import ThreadPoolExecutor
-from scipy.optimize import minimize
+from dotenv import load_dotenv
 import ta
+from concurrent.futures import ThreadPoolExecutor
+import asyncio
+from scipy.optimize import minimize
+from scipy import stats
+# from hmmlearn import hmm  # Removed due to compilation issues
+
+# Load environment variables
+load_dotenv()
+
+app = FastAPI(title="Financial Data Analyst Dashboard", version="1.0.0")
+
+# Mount static files for the frontend
 import os
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Create FastAPI app
-app = FastAPI(title="Financial Analysis Dashboard", version="1.0.0")
-
-# Get the directory where this script is located
-current_dir = os.path.dirname(os.path.abspath(__file__))
-static_dir = os.path.join(current_dir, "static")
-templates_dir = os.path.join(current_dir, "templates")
-
-# Create templates directory if it doesn't exist
-os.makedirs(templates_dir, exist_ok=True)
-
-# Mount static files
-if os.path.exists(static_dir):
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
-else:
-    logger.warning(f"Static directory {static_dir} does not exist")
-
-# Setup templates
-templates = Jinja2Templates(directory=templates_dir)
-
-@app.get("/", response_class=HTMLResponse)
-async def read_root(request: Request):
-    return '''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Financial Analysis Dashboard</title>
-        <style>
-            body { font-family: Arial, sans-serif; margin: 40px; }
-            .container { max-width: 800px; margin: 0 auto; }
-            .header { text-align: center; color: #333; }
-            .status { background: #e8f5e8; padding: 20px; border-radius: 5px; margin: 20px 0; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1 class="header">Financial Analysis Dashboard</h1>
-            <div class="status">
-                <h2>Application Status: Running</h2>
-                <p>Your FastAPI application is successfully deployed on PythonAnywhere!</p>
-                <p>Environment: Production</p>
-                <p>API Keys: Configured</p>
-            </div>
-            <h3>Available Endpoints:</h3>
-            <ul>
-                <li><a href="/docs">API Documentation (Swagger UI)</a></li>
-                <li><a href="/redoc">API Documentation (ReDoc)</a></li>
-                <li><a href="/health">Health Check</a></li>
-            </ul>
-        </div>
-    </body>
-    </html>
-    '''
-
-@app.get("/health")
-async def health_check():
-    return {
-        "status": "healthy",
-        "message": "Financial Analysis Dashboard is running",
-        "environment": os.getenv("ENVIRONMENT", "development"),
-        "debug": os.getenv("DEBUG", "False")
-    }
-
-@app.get("/api/status")
-async def api_status():
-    return {
-        "api_name": "Financial Analysis Dashboard",
-        "version": "1.0.0",
-        "status": "operational",
-        "endpoints": [
-            "/",
-            "/health",
-            "/api/status",
-            "/docs",
-            "/redoc"
-        ]
-
-# Financial Analysis Class
 class FinancialAnalyzer:
     def __init__(self):
-        # Supported stocks
         self.supported_stocks = [
-            'AAPL', 'GOOGL', 'MSFT', 'AMZN', 'TSLA', 'META', 'NVDA', 'NFLX',
-            'AMD', 'INTC', 'CRM', 'ADBE', 'PYPL', 'UBER', 'LYFT', 'SQ',
-            'ROKU', 'ZM', 'DOCU', 'OKTA', 'SNOW', 'PLTR', 'CRWD', 'NET'
+            "AAPL", "GOOGL", "MSFT", "AMZN", "TSLA", 
+            "META", "NVDA", "NFLX", "AMD", "INTC",
+            "SPY", "QQQ", "IWM", "VTI", "BND"
         ]
         
         # Initialize Alpaca API
-        # self.alpaca_api = tradeapi.REST(
-            # os.getenv('ALPACA_API_KEY'),
-            # os.getenv('ALPACA_SECRET_KEY'),
-            # os.getenv('ALPACA_BASE_URL'),
-            # api_version='v2'
-        # )
+        self.alpaca_api = tradeapi.REST(
+            os.getenv('ALPACA_API_KEY'),
+            os.getenv('ALPACA_SECRET_KEY'),
+            os.getenv('ALPACA_BASE_URL'),
+            api_version='v2'
+        )
         
         # Polygon.io configuration
         self.polygon_api_key = os.getenv('POLYGON_API_KEY')
@@ -164,15 +93,15 @@ class FinancialAnalyzer:
             start_date = end_date - timedelta(days=365)
         
         # Get bars from Alpaca
-        # bars = self.alpaca_api.get_bars(
-            # symbol,
-            # tradeapi.TimeFrame.Day,
-            # start=start_date.strftime('%Y-%m-%d'),
-            # end=end_date.strftime('%Y-%m-%d'),
-            # adjustment='raw'
-        # ).df
+        bars = self.alpaca_api.get_bars(
+            symbol,
+            tradeapi.TimeFrame.Day,
+            start=start_date.strftime('%Y-%m-%d'),
+            end=end_date.strftime('%Y-%m-%d'),
+            adjustment='raw'
+        ).df
         
-        # return bars
+        return bars
     
     def get_polygon_data(self, symbol: str, period: str) -> dict:
         """Fetch additional data from Polygon.io"""

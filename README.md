@@ -2,6 +2,11 @@
 
 A comprehensive financial data analysis platform built with Python FastAPI and modern web technologies. This project provides real-time stock analysis, portfolio management, and financial insights.
 
+[![GitHub](https://img.shields.io/badge/GitHub-Repository-blue?style=for-the-badge&logo=github)](https://github.com/invecta/hidden-markov-model-financial-analysis)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-PythonAnywhere-green?style=for-the-badge)](https://hindaouihani.pythonanywhere.com)
+[![Python](https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge&logo=python)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com)
+
 ## Features
 
 ### 📊 Stock Analysis
@@ -45,8 +50,8 @@ A comprehensive financial data analysis platform built with Python FastAPI and m
 
 1. **Clone the repository**
    ```bash
-   git clone <your-repo-url>
-   cd financial-analyst-project
+   git clone https://github.com/invecta/hidden-markov-model-financial-analysis.git
+   cd hidden-markov-model-financial-analysis
    ```
 
 2. **Create virtual environment**
@@ -273,9 +278,15 @@ This project is open source and available under the MIT License.
 ## Support
 
 For questions, issues, or contributions:
-- Create an issue in the repository
+- Create an issue in the [GitHub repository](https://github.com/invecta/hidden-markov-model-financial-analysis/issues)
 - Contact the development team
 - Check the documentation and examples
+
+## Repository Links
+
+- **GitHub Repository**: [https://github.com/invecta/hidden-markov-model-financial-analysis](https://github.com/invecta/hidden-markov-model-financial-analysis)
+- **Live Demo**: [https://hindaouihani.pythonanywhere.com](https://hindaouihani.pythonanywhere.com)
+- **Documentation**: Available in the `/static/documentation.html` file
 
 ## Acknowledgments
 

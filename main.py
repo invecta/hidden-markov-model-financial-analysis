@@ -135,37 +135,15 @@ class FinancialAnalyzer:
         self.polygon_api_key = os.getenv('POLYGON_API_KEY')
         self.polygon_base_url = os.getenv('POLYGON_BASE_URL')
         
-        # Alpha Vantage configuration
-        self.alpha_vantage_key = os.getenv('ALPHA_VANTAGE_API_KEY')
-        
-        # IEX Cloud configuration
-        self.iex_cloud_key = os.getenv('IEX_CLOUD_API_KEY')
+        # Only use Alpaca and Polygon.io APIs
         
         # Thread pool for concurrent API calls
         self.executor = None
     
     def get_stock_data(self, symbol: str, period: str = "1y") -> dict:
-        """Fetch stock data from multiple sources with fallback chain"""
+        """Fetch stock data using Alpaca and Polygon.io APIs with Yahoo Finance fallback"""
         try:
-            # 1. Try Alpha Vantage first (most reliable)
-            try:
-                hist = self.get_alpha_vantage_data(symbol, period)
-                if not hist.empty:
-                    logger.info(f"Got {len(hist)} data points for {symbol} from Alpha Vantage")
-                    return self.process_stock_data(hist, symbol)
-            except Exception as e:
-                logger.warning(f"Alpha Vantage failed for {symbol}: {e}")
-            
-            # 2. Try IEX Cloud
-            try:
-                hist = self.get_iex_cloud_data(symbol, period)
-                if not hist.empty:
-                    logger.info(f"Got {len(hist)} data points for {symbol} from IEX Cloud")
-                    return self.process_stock_data(hist, symbol)
-            except Exception as e:
-                logger.warning(f"IEX Cloud failed for {symbol}: {e}")
-            
-            # 3. Try Alpaca (if available)
+            # 1. Try Alpaca API first (user's primary API)
             if self.alpaca_api:
                 try:
                     hist = self.get_alpaca_data(symbol, period)
@@ -175,7 +153,16 @@ class FinancialAnalyzer:
                 except Exception as e:
                     logger.warning(f"Alpaca failed for {symbol}: {e}")
             
-            # 4. Try Yahoo Finance with multiple attempts
+            # 2. Try Polygon.io API (user's secondary API)
+            try:
+                hist = self.get_polygon_stock_data(symbol, period)
+                if not hist.empty:
+                    logger.info(f"Got {len(hist)} data points for {symbol} from Polygon.io")
+                    return self.process_stock_data(hist, symbol)
+            except Exception as e:
+                logger.warning(f"Polygon.io failed for {symbol}: {e}")
+            
+            # 3. Try Yahoo Finance with multiple attempts (free fallback)
             stock = yf.Ticker(symbol)
             attempts = [
                 {'period': period, 'interval': '1d'},
@@ -195,7 +182,7 @@ class FinancialAnalyzer:
                     logger.warning(f"Yahoo Finance attempt failed for {symbol} with {attempt}: {e}")
                     continue
             
-            # 5. Last resort: try Yahoo Finance download
+            # 4. Last resort: try Yahoo Finance download
             try:
                 hist = yf.download(symbol, period="1y", progress=False, show_errors=False)
                 if not hist.empty:
@@ -204,7 +191,7 @@ class FinancialAnalyzer:
             except Exception as e:
                 logger.warning(f"Yahoo Finance download failed for {symbol}: {e}")
             
-            # 6. Final fallback: generate mock data for testing
+            # 5. Final fallback: generate mock data for testing
             logger.warning(f"All data sources failed for {symbol}, generating mock data for testing")
             return self.generate_mock_data(symbol, period)
             
@@ -246,57 +233,11 @@ class FinancialAnalyzer:
                 return pd.DataFrame()
         return pd.DataFrame()
     
-    def get_alpha_vantage_data(self, symbol: str, period: str) -> pd.DataFrame:
-        """Fetch data from Alpha Vantage API"""
+    def get_polygon_stock_data(self, symbol: str, period: str) -> pd.DataFrame:
+        """Fetch stock data from Polygon.io API"""
         try:
-            from alpha_vantage.timeseries import TimeSeries
-            
-            if not self.alpha_vantage_key or self.alpha_vantage_key == 'demo':
-                logger.warning("Alpha Vantage API key not configured")
-                return pd.DataFrame()
-            
-            ts = TimeSeries(key=self.alpha_vantage_key, output_format='pandas')
-            
-            # Get daily data
-            data, meta_data = ts.get_daily(symbol=symbol, outputsize='full')
-            
-            if data.empty:
-                return pd.DataFrame()
-            
-            # Convert to standard format
-            data.columns = ['Open', 'High', 'Low', 'Close', 'Volume']
-            data = data.sort_index()
-            
-            # Filter by period
-            end_date = datetime.now()
-            if period == "1y":
-                start_date = end_date - timedelta(days=365)
-            elif period == "6mo":
-                start_date = end_date - timedelta(days=180)
-            elif period == "3mo":
-                start_date = end_date - timedelta(days=90)
-            elif period == "1mo":
-                start_date = end_date - timedelta(days=30)
-            else:
-                start_date = end_date - timedelta(days=365)
-            
-            # Filter data by date range
-            data = data[data.index >= start_date.strftime('%Y-%m-%d')]
-            
-            return data
-            
-        except Exception as e:
-            logger.warning(f"Alpha Vantage API error: {e}")
-            return pd.DataFrame()
-    
-    def get_iex_cloud_data(self, symbol: str, period: str) -> pd.DataFrame:
-        """Fetch data from IEX Cloud API"""
-        try:
-            from iexfinance.stocks import get_historical_data
-            from datetime import datetime, timedelta
-            
-            if not self.iex_cloud_key or self.iex_cloud_key == 'pk_test_demo':
-                logger.warning("IEX Cloud API key not configured")
+            if not self.polygon_api_key:
+                logger.warning("Polygon.io API key not configured")
                 return pd.DataFrame()
             
             # Calculate date range
@@ -312,25 +253,40 @@ class FinancialAnalyzer:
             else:
                 start_date = end_date - timedelta(days=365)
             
-            # Get historical data
-            data = get_historical_data(
-                symbol, 
-                start=start_date, 
-                end=end_date, 
-                token=self.iex_cloud_key
-            )
+            # Polygon.io aggregates endpoint
+            url = f"{self.polygon_base_url}/v2/aggs/ticker/{symbol}/range/1/day/{start_date.strftime('%Y-%m-%d')}/{end_date.strftime('%Y-%m-%d')}"
+            params = {'apikey': self.polygon_api_key}
             
-            if data.empty:
-                return pd.DataFrame()
+            response = requests.get(url, params=params)
             
-            # Convert to standard format
-            data.columns = ['Open', 'High', 'Low', 'Close', 'Volume']
-            data = data.sort_index()
-            
-            return data
+            if response.status_code == 200:
+                data = response.json()
+                
+                if 'results' in data and data['results']:
+                    # Convert to DataFrame
+                    df_data = []
+                    for result in data['results']:
+                        df_data.append({
+                            'Open': result['o'],
+                            'High': result['h'],
+                            'Low': result['l'],
+                            'Close': result['c'],
+                            'Volume': result['v']
+                        })
+                    
+                    if df_data:
+                        df = pd.DataFrame(df_data)
+                        # Create date index
+                        dates = [datetime.fromtimestamp(result['t']/1000) for result in data['results']]
+                        df.index = dates
+                        df = df.sort_index()
+                        return df
+                
+            logger.warning(f"Polygon.io API returned no data for {symbol}")
+            return pd.DataFrame()
             
         except Exception as e:
-            logger.warning(f"IEX Cloud API error: {e}")
+            logger.warning(f"Polygon.io API error: {e}")
             return pd.DataFrame()
     
     def get_polygon_data(self, symbol: str, period: str) -> dict:

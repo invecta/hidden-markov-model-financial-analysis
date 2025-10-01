@@ -135,25 +135,48 @@ class FinancialAnalyzer:
         self.polygon_api_key = os.getenv('POLYGON_API_KEY')
         self.polygon_base_url = os.getenv('POLYGON_BASE_URL')
         
+        # Alpha Vantage configuration
+        self.alpha_vantage_key = os.getenv('ALPHA_VANTAGE_API_KEY')
+        
+        # IEX Cloud configuration
+        self.iex_cloud_key = os.getenv('IEX_CLOUD_API_KEY')
+        
         # Thread pool for concurrent API calls
         self.executor = None
     
     def get_stock_data(self, symbol: str, period: str = "1y") -> dict:
-        """Fetch stock data from multiple sources (Alpaca, Polygon, Yahoo Finance)"""
+        """Fetch stock data from multiple sources with fallback chain"""
         try:
-            # Try Alpaca first for real-time data (only if initialized)
+            # 1. Try Alpha Vantage first (most reliable)
+            try:
+                hist = self.get_alpha_vantage_data(symbol, period)
+                if not hist.empty:
+                    logger.info(f"Got {len(hist)} data points for {symbol} from Alpha Vantage")
+                    return self.process_stock_data(hist, symbol)
+            except Exception as e:
+                logger.warning(f"Alpha Vantage failed for {symbol}: {e}")
+            
+            # 2. Try IEX Cloud
+            try:
+                hist = self.get_iex_cloud_data(symbol, period)
+                if not hist.empty:
+                    logger.info(f"Got {len(hist)} data points for {symbol} from IEX Cloud")
+                    return self.process_stock_data(hist, symbol)
+            except Exception as e:
+                logger.warning(f"IEX Cloud failed for {symbol}: {e}")
+            
+            # 3. Try Alpaca (if available)
             if self.alpaca_api:
                 try:
                     hist = self.get_alpaca_data(symbol, period)
                     if not hist.empty:
+                        logger.info(f"Got {len(hist)} data points for {symbol} from Alpaca")
                         return self.process_stock_data(hist, symbol)
                 except Exception as e:
                     logger.warning(f"Alpaca failed for {symbol}: {e}")
             
-            # Fallback to Yahoo Finance with multiple attempts
+            # 4. Try Yahoo Finance with multiple attempts
             stock = yf.Ticker(symbol)
-            
-            # Try different approaches
             attempts = [
                 {'period': period, 'interval': '1d'},
                 {'period': '1y', 'interval': '1d'},
@@ -165,23 +188,23 @@ class FinancialAnalyzer:
             for attempt in attempts:
                 try:
                     hist = stock.history(period=attempt['period'], interval=attempt['interval'])
-                    if not hist.empty and len(hist) > 10:  # Need at least 10 data points
-                        logger.info(f"Got {len(hist)} data points for {symbol} with period={attempt['period']}")
+                    if not hist.empty and len(hist) > 10:
+                        logger.info(f"Got {len(hist)} data points for {symbol} from Yahoo Finance with period={attempt['period']}")
                         return self.process_stock_data(hist, symbol)
                 except Exception as e:
                     logger.warning(f"Yahoo Finance attempt failed for {symbol} with {attempt}: {e}")
                     continue
             
-            # Last resort: try with download function
+            # 5. Last resort: try Yahoo Finance download
             try:
                 hist = yf.download(symbol, period="1y", progress=False, show_errors=False)
                 if not hist.empty:
-                    logger.info(f"Got {len(hist)} data points for {symbol} using download")
+                    logger.info(f"Got {len(hist)} data points for {symbol} using Yahoo Finance download")
                     return self.process_stock_data(hist, symbol)
             except Exception as e:
                 logger.warning(f"Yahoo Finance download failed for {symbol}: {e}")
             
-            # Final fallback: generate mock data for testing
+            # 6. Final fallback: generate mock data for testing
             logger.warning(f"All data sources failed for {symbol}, generating mock data for testing")
             return self.generate_mock_data(symbol, period)
             
@@ -222,6 +245,93 @@ class FinancialAnalyzer:
                 logger.warning(f"Alpaca API error: {e}")
                 return pd.DataFrame()
         return pd.DataFrame()
+    
+    def get_alpha_vantage_data(self, symbol: str, period: str) -> pd.DataFrame:
+        """Fetch data from Alpha Vantage API"""
+        try:
+            from alpha_vantage.timeseries import TimeSeries
+            
+            if not self.alpha_vantage_key or self.alpha_vantage_key == 'demo':
+                logger.warning("Alpha Vantage API key not configured")
+                return pd.DataFrame()
+            
+            ts = TimeSeries(key=self.alpha_vantage_key, output_format='pandas')
+            
+            # Get daily data
+            data, meta_data = ts.get_daily(symbol=symbol, outputsize='full')
+            
+            if data.empty:
+                return pd.DataFrame()
+            
+            # Convert to standard format
+            data.columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+            data = data.sort_index()
+            
+            # Filter by period
+            end_date = datetime.now()
+            if period == "1y":
+                start_date = end_date - timedelta(days=365)
+            elif period == "6mo":
+                start_date = end_date - timedelta(days=180)
+            elif period == "3mo":
+                start_date = end_date - timedelta(days=90)
+            elif period == "1mo":
+                start_date = end_date - timedelta(days=30)
+            else:
+                start_date = end_date - timedelta(days=365)
+            
+            # Filter data by date range
+            data = data[data.index >= start_date.strftime('%Y-%m-%d')]
+            
+            return data
+            
+        except Exception as e:
+            logger.warning(f"Alpha Vantage API error: {e}")
+            return pd.DataFrame()
+    
+    def get_iex_cloud_data(self, symbol: str, period: str) -> pd.DataFrame:
+        """Fetch data from IEX Cloud API"""
+        try:
+            from iexfinance.stocks import get_historical_data
+            from datetime import datetime, timedelta
+            
+            if not self.iex_cloud_key or self.iex_cloud_key == 'pk_test_demo':
+                logger.warning("IEX Cloud API key not configured")
+                return pd.DataFrame()
+            
+            # Calculate date range
+            end_date = datetime.now()
+            if period == "1y":
+                start_date = end_date - timedelta(days=365)
+            elif period == "6mo":
+                start_date = end_date - timedelta(days=180)
+            elif period == "3mo":
+                start_date = end_date - timedelta(days=90)
+            elif period == "1mo":
+                start_date = end_date - timedelta(days=30)
+            else:
+                start_date = end_date - timedelta(days=365)
+            
+            # Get historical data
+            data = get_historical_data(
+                symbol, 
+                start=start_date, 
+                end=end_date, 
+                token=self.iex_cloud_key
+            )
+            
+            if data.empty:
+                return pd.DataFrame()
+            
+            # Convert to standard format
+            data.columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+            data = data.sort_index()
+            
+            return data
+            
+        except Exception as e:
+            logger.warning(f"IEX Cloud API error: {e}")
+            return pd.DataFrame()
     
     def get_polygon_data(self, symbol: str, period: str) -> dict:
         """Fetch additional data from Polygon.io"""

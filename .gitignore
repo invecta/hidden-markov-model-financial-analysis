@@ -78,3 +78,52 @@ coverage.xml
 # Temporary files
 *.tmp
 *.temp
+
+# Development and backup files
+*_backup.py
+*_old.py
+*_original.py
+*_simple.py
+*_working.py
+*_test.py
+*_demo.py
+*_temp.py
+*_backup.*
+*_old.*
+*_original.*
+*_simple.*
+*_working.*
+*_test.*
+*_demo.*
+*_temp.*
+
+# Documentation drafts
+*_DRAFT.md
+*_TEMP.md
+*_BACKUP.md
+*_OLD.md
+*_ORIGINAL.md
+*_SIMPLE.md
+*_WORKING.md
+*_TEST.md
+*_DEMO.md
+
+# Deployment files (keep only production ones)
+deploy_*.md
+*_deployment.md
+*_instructions.md
+*_guide.md
+*_tutorial.md
+*_demo.md
+*_presentation.md
+*_roadmap.md
+*_summary.md
+*_specifications.md
+*_problem.md
+*_statement.md
+
+# API test files
+test_*.py
+*_test.py
+demo_*.py
+*_demo.py

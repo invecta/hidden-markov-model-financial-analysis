@@ -99,6 +99,7 @@ async def api_status():
             "/docs",
             "/redoc"
         ]
+    }
 
 # Financial Analysis Class
 class FinancialAnalyzer:

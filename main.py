@@ -1,6 +1,6 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
+# from fastapi import FastAPI, HTTPException
+# from fastapi.staticfiles import StaticFiles
+# from fastapi.responses import HTMLResponse
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -10,7 +10,7 @@ from typing import List, Optional
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.utils import PlotlyJSONEncoder
-import alpaca_trade_api as tradeapi
+# import alpaca_trade_api as tradeapi
 import requests
 import os
 from dotenv import load_dotenv
@@ -40,12 +40,12 @@ class FinancialAnalyzer:
         ]
         
         # Initialize Alpaca API
-        self.alpaca_api = tradeapi.REST(
-            os.getenv('ALPACA_API_KEY'),
-            os.getenv('ALPACA_SECRET_KEY'),
-            os.getenv('ALPACA_BASE_URL'),
-            api_version='v2'
-        )
+        # self.alpaca_api = tradeapi.REST(
+            # os.getenv('ALPACA_API_KEY'),
+            # os.getenv('ALPACA_SECRET_KEY'),
+            # os.getenv('ALPACA_BASE_URL'),
+            # api_version='v2'
+        # )
         
         # Polygon.io configuration
         self.polygon_api_key = os.getenv('POLYGON_API_KEY')
@@ -93,15 +93,15 @@ class FinancialAnalyzer:
             start_date = end_date - timedelta(days=365)
         
         # Get bars from Alpaca
-        bars = self.alpaca_api.get_bars(
-            symbol,
-            tradeapi.TimeFrame.Day,
-            start=start_date.strftime('%Y-%m-%d'),
-            end=end_date.strftime('%Y-%m-%d'),
-            adjustment='raw'
-        ).df
+        # bars = self.alpaca_api.get_bars(
+            # symbol,
+            # tradeapi.TimeFrame.Day,
+            # start=start_date.strftime('%Y-%m-%d'),
+            # end=end_date.strftime('%Y-%m-%d'),
+            # adjustment='raw'
+        # ).df
         
-        return bars
+        # return bars
     
     def get_polygon_data(self, symbol: str, period: str) -> dict:
         """Fetch additional data from Polygon.io"""
